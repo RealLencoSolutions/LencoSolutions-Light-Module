@@ -14,11 +14,8 @@ Arduino based accessory board for the balance app in BV's BLDC firmware.
 1. It uses CAN bus, so there are NO DOWNSIDES to adding it. JUST DO IT!
 
 ## Parts List
-1. Adruino Nano
-1. MCP2515 Can Bus Module Board
-1. 5v piezo active buzzer
-1. 2x LED Strips (WS2812 GRB is the default, but anything supported by FastLED should work)
-1. SSD1306 128x64 Display (4 pin, any color, the blue/yellow works nice too)
+LencoSolutions PCB
+[Light Module](https://lencosolutions.nl/webshop/light-module/)
 
 # Wiring
 ## Can Module: 
