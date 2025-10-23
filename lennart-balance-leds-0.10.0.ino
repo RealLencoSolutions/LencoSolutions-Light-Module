@@ -65,7 +65,7 @@ void knightRider(int red, int green, int blue, int ridingWidth);
 void setup() {
  // Serial.begin(115200);
 
-  previousMillis = millis();
+  //previousMillis = millis();
 
   esc.setup();
   balanceBeeper.setup();
