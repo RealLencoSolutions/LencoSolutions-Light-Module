@@ -1,7 +1,7 @@
 # LencoSolutions light module info
 I started with the original ballance buddy project and added stuff like a brake function and knight rider animation.
 The code was also revised to make it non blocking and fast.
-Have fun, maybe contribute and check out my site for the hardwar: LencoSolutions.nl
+Have fun, maybe contribute and check out my site for the hardware: LencoSolutions.nl
 
 
 
