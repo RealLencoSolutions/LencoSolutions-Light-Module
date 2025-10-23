@@ -16,6 +16,7 @@ Arduino based accessory board for the balance app in BV's BLDC firmware.
 ## Parts List
 LencoSolutions PCB
 [Light Module](https://lencosolutions.nl/webshop/light-module/)
+[Programmer](https://www.amazon.com/Mixse-USBASP-Programming-Device-ATMEL/dp/B075JN58HT)
 
 # Wiring
 ## Can Module: 
