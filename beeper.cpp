@@ -10,10 +10,10 @@ class Beeper {
     };
     int pin;
     long beepStartTime = 0;
-    bool isBeeping = false;
     int beepsLength = 0;
     struct Beep beeps[20];
   public:
+    bool isBeeping = false;
     Beeper(int beeper_pin){
       pin = beeper_pin;
     }
@@ -85,7 +85,7 @@ class Beeper {
       
       beepStartTime = millis();
       isBeeping = true;
-      beepsLength = 3;
+      beepsLength = 2;
       // On 1
       beeps[0].startOffset = 0;
       beeps[0].frequency = 440;
@@ -94,10 +94,6 @@ class Beeper {
       beeps[1].startOffset = 300;
       beeps[1].frequency = 0;
       beeps[1].triggered = false;
-      // off off
-      beeps[2].startOffset = 300;
-      beeps[2].frequency = 0;
-      beeps[2].triggered = false;
     }
 
     void queueLongSingle(){

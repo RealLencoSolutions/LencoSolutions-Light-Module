@@ -89,8 +89,10 @@ public:
     mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ);
     mcp2515.setNormalMode();
 
-    // For testing
-    getBalance();
+    // Initialize with default values
+    dutyCycle = 0.0;
+    erpm = 0.0;
+    voltage = 0.0;
   }
 
   // New method for polling realtime data (called only when needed)

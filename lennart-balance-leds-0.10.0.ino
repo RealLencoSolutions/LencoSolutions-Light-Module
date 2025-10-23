@@ -48,11 +48,8 @@ unsigned long lastCanPollTime = 0;
 unsigned long lastKnightRiderUpdate = 0;
 unsigned long lastBrakeCheckMillis = 0;
 const unsigned long brakeCheckInterval = 50;
-unsigned long previousMillis = 0;
-unsigned long delayStartTime = 0;
-unsigned long delayDuration = 10;
-bool isReturnDelayActive = false;
-
+unsigned long lastLEDUpdateMillis = 0;
+const unsigned long LED_UPDATE_INTERVAL = 16; // ~60 FPS for smooth LED updates
 int currentLEDIndex = 0;
 int direction = FORWARD;
 int animationDirFlag = 1;
@@ -61,8 +58,6 @@ int previousErpm = 0;
 bool startupState = true; 
 bool movingState = false; 
 bool isBraking = false;
-bool returningToStartup = false;
-bool returningToStartupFlag = false;
 
 void knightRider(int red, int green, int blue, int ridingWidth);
 
@@ -117,7 +112,6 @@ void startup() {
         }
     }
   }
-  FastLED.show();
 }
 
 void loop() {
@@ -152,15 +146,7 @@ void loop() {
   } else { // When ERPM is between -200 and 200
     startupState = true;
     movingState = false;
-    delayDuration = SLOW_DELAY; // Set to slow delay when in startup state
     FastLED.setBrightness(STARTUP_BRIGHTNESS); // Set brightness to startup level
-  }
-
-  // Additional condition to set fast delay or slow delay based on the threshold
-  if (abs(globalErpm) > THRESHOLD) {
-    delayDuration = FAST_DELAY; // Set to fast delay when ERPM is above the threshold
-  } else {
-    delayDuration = SLOW_DELAY; // Set to slow delay when ERPM is below the threshold
   }
 
   // Handle the states
@@ -173,6 +159,12 @@ void loop() {
   if (millis() - lastBrakeCheckMillis >= brakeCheckInterval) {
     checkBraking();
     lastBrakeCheckMillis = millis();
+  }
+  
+  // Controlled LED updates to prevent multiple FastLED.show() calls
+  if (millis() - lastLEDUpdateMillis >= LED_UPDATE_INTERVAL) {
+    FastLED.show();
+    lastLEDUpdateMillis = millis();
   }
 }
 
@@ -224,8 +216,6 @@ void checkBraking() {
             }
         }
     }
-
-    FastLED.show();
 }
 
 
@@ -251,6 +241,7 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
   currentLEDIndex = constrain(currentLEDIndex, 0, NUM_LEDS - 1 - ridingWidth - 2);
 
   // Check if it's time to update the LEDs
+  unsigned long delayDuration = (abs(globalErpm) > THRESHOLD) ? FAST_DELAY : SLOW_DELAY;
   if (millis() - lastKnightRiderUpdate >= delayDuration) {
 
     // Update LEDs for the current position
@@ -271,8 +262,6 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
       // Change the direction
       animationDirFlag = 1;
     }
-
-    FastLED.show();
 
     // Save the last update time
     lastKnightRiderUpdate = millis();
