@@ -1,7 +1,7 @@
-# I changed to code to feature the Knight Rider thing that walks the light back and forth.
-I also added brake lights and I polished the code a bit here and there. 
-All credit go to the OP, much easier to change then to start.
-Have fun, maybe contribute and check out my site for the hardware LencoSolutions.nl
+# LencoSolutions light module info
+I started with the original ballance buddy project and added stuff like a brake function and knight rider animation.
+The code was also revised to make it non blocking and fast.
+Have fun, maybe contribute and check out my site for the hardwar: LencoSolutions.nl
 
 
 
