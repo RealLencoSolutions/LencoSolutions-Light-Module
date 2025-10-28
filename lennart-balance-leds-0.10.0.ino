@@ -1,25 +1,26 @@
 #include <Arduino.h>
-
-#include "balance_beeper.cpp"
-#include "esc.cpp"
-
 #include <FastLED.h>
 
-#define FLASHING_LED_RED 230
-#define FLASHING_LED_GREEN 230
-#define FLASHING_LED_BLUE 255
+#undef SPI_CLOCK     // Prevent FastLED/MCP2515 macro conflict
+
+#include "balance_beeper.cpp"
+#include "esc.cpp"   // includes your updated ESC class
+
+#define FLASHING_LED_RED 228
+#define FLASHING_LED_GREEN 158
+#define FLASHING_LED_BLUE 0
 
 #define CONSTANT_LED_RED 255
 #define CONSTANT_LED_GREEN 0
 #define CONSTANT_LED_BLUE 0
 
 #define THRESHOLD 5000
-#define FAST_DELAY 14
+#define FAST_DELAY 20
 #define SLOW_DELAY 50
 #define STARTUP_BRIGHTNESS 30 
 #define NORMAL_BRIGHTNESS 255 
 
-#define NUM_LEDS 20 
+#define NUM_LEDS 17 
 #define FORWARD_PIN 5
 #define REVERSE_PIN 6
 #define FORWARD 0
@@ -36,20 +37,24 @@ CRGB reverse_leds[NUM_LEDS];
 ESC esc;
 BalanceBeeper balanceBeeper;
 
-// Global variables for ESC data (updated by polling)
+// Global variables for ESC data
 double globalErpm = 0.0;
 double globalVoltage = 0.0;
 double globalDutyCycle = 0.0;
+// double globalAdc1 = 0.0;   // (for later use)
+// double globalAdc2 = 0.0;   // (for later use)
 
 // Polling configuration
-const unsigned long CAN_POLLING_INTERVAL = 100; // Poll every 100ms (adjustable)
+const unsigned long CAN_POLLING_INTERVAL = 100; // every 100ms
 unsigned long lastCanPollTime = 0;
 
+// LED & animation states
 unsigned long lastKnightRiderUpdate = 0;
 unsigned long lastBrakeCheckMillis = 0;
 const unsigned long brakeCheckInterval = 50;
 unsigned long lastLEDUpdateMillis = 0;
-const unsigned long LED_UPDATE_INTERVAL = 16; // ~60 FPS for smooth LED updates
+const unsigned long LED_UPDATE_INTERVAL = 16; // ~60 FPS
+
 int currentLEDIndex = 0;
 int direction = FORWARD;
 int animationDirFlag = 1;
@@ -60,210 +65,198 @@ bool movingState = false;
 bool isBraking = false;
 
 void knightRider(int red, int green, int blue, int ridingWidth);
-
+void checkBraking();
 
 void setup() {
- // Serial.begin(115200);
-
-  //previousMillis = millis();
-
+  // Serial.begin(115200);
   esc.setup();
   balanceBeeper.setup();
+
   FastLED.addLeds<WS2812B, FORWARD_PIN, GRB>(forward_leds, NUM_LEDS)
       .setCorrection(TypicalLEDStrip);
   FastLED.addLeds<WS2812B, REVERSE_PIN, GRB>(reverse_leds, NUM_LEDS)
       .setCorrection(TypicalLEDStrip);
 
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 1500);
-  FastLED.setBrightness(STARTUP_BRIGHTNESS); 
-  FastLED.clear(); 
+  FastLED.setBrightness(STARTUP_BRIGHTNESS);
+  FastLED.clear();
 
+  // Initial LED pattern
   for (int i = 0; i < NUM_LEDS; i++) {
     forward_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
-    if (i % 2 == 0) { // Only light up every other LED
-        reverse_leds[i] = CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
-    } else {
-        reverse_leds[i] = CRGB(0, 0, 0); // Turn off every other LED
-    }
+    reverse_leds[i] = (i % 2 == 0)
+        ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
+        : CRGB(0, 0, 0);
   }
   FastLED.show();
 }
 
-void startup() {
-    // If moving or braking, do not execute the startup logic
-  if (movingState || isBraking) {
-    return;
-  }
-  FastLED.setBrightness(STARTUP_BRIGHTNESS);
-  for (int i = 0; i < NUM_LEDS; i++) {
-    if (direction == FORWARD) {
-        forward_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
-        if (i % 2 == 0) {
-            reverse_leds[i] = CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
-        } else {
-            reverse_leds[i] = CRGB(0, 0, 0); // Turn off every other LED
-        }
-    } else { // direction is REVERSE
-        reverse_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
-        if (i % 2 == 0) {
-            forward_leds[i] = CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
-        } else {
-            forward_leds[i] = CRGB(0, 0, 0); // Turn off every other LED
-        }
-    }
-  }
-}
-
 void loop() {
-  // Check if it's time to poll CAN data
+  // === Periodic CAN polling ===
   if (millis() - lastCanPollTime >= CAN_POLLING_INTERVAL) {
-    // Poll for realtime data and update global variables
-    if (esc.pollRealtimeData()) {
-      globalErpm = esc.erpm;
-      globalVoltage = esc.voltage;
-      globalDutyCycle = esc.dutyCycle;
-    }
+    esc.getRealtimeData();      // send request for realtime data
+    //esc.readResponse();             // read and parse response
     lastCanPollTime = millis();
+
+    // Update globals if valid data was parsed
+    globalErpm = esc.erpm;
+    globalVoltage = esc.voltage;
+    globalDutyCycle = esc.dutyCycle;
+    // globalAdc1 = esc.adc1;  // (commented for later use)
+    // globalAdc2 = esc.adc2;
   }
-  
-  // Always listen for incoming CAN messages (non-blocking)
-  esc.listenForMessages();
-  
-  // Use global variables for all logic
+
+  // === Use global data ===
   balanceBeeper.loop(globalDutyCycle, globalErpm, globalVoltage);
 
-  // Determine the state and direction
+  // === Determine direction and state ===
   if (globalErpm > 200) {
     startupState = false;
     movingState = true;
     direction = FORWARD;
-    FastLED.setBrightness(NORMAL_BRIGHTNESS); // Set brightness to normal level
+    FastLED.setBrightness(NORMAL_BRIGHTNESS);
   } else if (globalErpm < -200) {
     startupState = false;
     movingState = true;
     direction = REVERSE;
-    FastLED.setBrightness(NORMAL_BRIGHTNESS); // Set brightness to normal level
-  } else { // When ERPM is between -200 and 200
+    FastLED.setBrightness(NORMAL_BRIGHTNESS);
+  } else {
     startupState = true;
     movingState = false;
-    FastLED.setBrightness(STARTUP_BRIGHTNESS); // Set brightness to startup level
+    FastLED.setBrightness(STARTUP_BRIGHTNESS);
   }
 
-  // Handle the states
+  // === LED patterns ===
   if (startupState) {
-    startup(); // Call the startup function when in startup state
+    // Static startup LEDs
+    for (int i = 0; i < NUM_LEDS; i++) {
+      if (direction == FORWARD) {
+        forward_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
+        reverse_leds[i] = (i % 2 == 0)
+            ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
+            : CRGB(0, 0, 0);
+      } else {
+        reverse_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
+        forward_leds[i] = (i % 2 == 0)
+            ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
+            : CRGB(0, 0, 0);
+      }
+    }
   } else if (movingState) {
     knightRider(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE, 5);
   }
 
+  // === Brake logic ===
   if (millis() - lastBrakeCheckMillis >= brakeCheckInterval) {
     checkBraking();
     lastBrakeCheckMillis = millis();
   }
-  
-  // Controlled LED updates to prevent multiple FastLED.show() calls
+
+  // === Throttled LED update ===
   if (millis() - lastLEDUpdateMillis >= LED_UPDATE_INTERVAL) {
     FastLED.show();
     lastLEDUpdateMillis = millis();
   }
 }
 
-
-
 void checkBraking() {
-    static int debounceOnCount = 0;
-    static int debounceOffCount = 0;
-    int erpmDifference = previousErpm - globalErpm;
+  static int debounceOnCount = 0;
+  static int debounceOffCount = 0;
+  int erpmDifference = previousErpm - globalErpm;
 
-    if ((direction == FORWARD && erpmDifference > BRAKE_THRESHOLD && globalErpm > BRAKE_IDLE_THRESHOLD) ||
-        (direction == REVERSE && erpmDifference < -BRAKE_THRESHOLD && globalErpm < -BRAKE_IDLE_THRESHOLD)) {
-        debounceOnCount++;
-        debounceOffCount = 0;
-        if (debounceOnCount >= BRAKE_ON_DEBOUNCE_COUNT) {
-            isBraking = true;
-            debounceOnCount = 0;
-        }
-    } else {
-        debounceOffCount++;
-        debounceOnCount = 0;
-        if (debounceOffCount >= BRAKE_OFF_DEBOUNCE_COUNT) {
-            isBraking = false;
-            debounceOffCount = 0;
-        }
+  if ((direction == FORWARD && erpmDifference > BRAKE_THRESHOLD && globalErpm > BRAKE_IDLE_THRESHOLD) ||
+      (direction == REVERSE && erpmDifference < -BRAKE_THRESHOLD && globalErpm < -BRAKE_IDLE_THRESHOLD)) {
+    debounceOnCount++;
+    debounceOffCount = 0;
+    if (debounceOnCount >= BRAKE_ON_DEBOUNCE_COUNT) {
+      isBraking = true;
+      debounceOnCount = 0;
     }
-
-    previousErpm = globalErpm;
-
-    CRGB *leds_const = nullptr;
-    if (direction == FORWARD) {
-        leds_const = reverse_leds;
-    } else if (direction == REVERSE) {
-        leds_const = forward_leds;
+  } else {
+    debounceOffCount++;
+    debounceOnCount = 0;
+    if (debounceOffCount >= BRAKE_OFF_DEBOUNCE_COUNT) {
+      isBraking = false;
+      debounceOffCount = 0;
     }
+  }
 
-    if (isBraking) {
-        // Set all LEDs to braking color when braking
-        for (int i = 0; i < NUM_LEDS; i++) {
-            leds_const[i].setRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
-        }
-    } else {
-        // Set 50% LEDs to color and the rest off when not braking
-        for (int i = 0; i < NUM_LEDS; i++) {
-            if (i % 2 == 0) {
-                leds_const[i].setRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
-            } else {
-                leds_const[i] = CRGB(0, 0, 0);
-            }
-        }
+  previousErpm = globalErpm;
+
+  CRGB *leds_const = (direction == FORWARD) ? reverse_leds : forward_leds;
+  if (isBraking) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds_const[i].setRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
     }
+  } else {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      if (i % 2 == 0)
+        leds_const[i].setRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE);
+      else
+        leds_const[i] = CRGB(0, 0, 0);
+    }
+  }
 }
 
-
-
-
 void knightRider(int red, int green, int blue, int ridingWidth) {
-  CRGB *leds = nullptr;
+  // Select correct LED array based on drive direction
+  CRGB *leds = (direction == FORWARD) ? forward_leds : reverse_leds;
+  if (!leds) return;
 
-  if (direction == FORWARD) {
-    leds = forward_leds;
-  } else if (direction == REVERSE) {
-    leds = reverse_leds;
-  } else {
-    return; // Exit if direction is not FORWARD or REVERSE
+  // === Stop animation when idle ===
+  const long IDLE_ERPM = 200; // below this, animation stops
+  if (abs(globalErpm) < IDLE_ERPM) {
+    // Smooth fade out when idle
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i].fadeToBlackBy(40);
+    }
+    FastLED.show();
+    return;
   }
 
-  // Fade existing LEDs before setting new ones
-  for (int i = 0; i < NUM_LEDS; i++) {
-    leds[i].fadeToBlackBy(80); // Adjust the fade value as needed
-  }
+  // === Calculate delay based on ERPM ===
+  long erpm = abs(globalErpm);
+  unsigned long delayDuration = (unsigned long)map(erpm, 200, 20000, 80, 5);
+  delayDuration = constrain(delayDuration, 5UL, 250UL);
 
-  // Ensure the currentLEDIndex is within bounds
-  currentLEDIndex = constrain(currentLEDIndex, 0, NUM_LEDS - 1 - ridingWidth - 2);
-
-  // Check if it's time to update the LEDs
-  unsigned long delayDuration = (abs(globalErpm) > THRESHOLD) ? FAST_DELAY : SLOW_DELAY;
+  // === Time to update ===
   if (millis() - lastKnightRiderUpdate >= delayDuration) {
 
-    // Update LEDs for the current position
-    leds[currentLEDIndex].setRGB(red / 10, green / 10, blue / 10);
-    for (int j = 1; j <= ridingWidth; j++) {
-      leds[currentLEDIndex + j].setRGB(red, green, blue);
+    // Slightly dim all LEDs to create a smooth trail
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i].fadeToBlackBy(60);
     }
-    leds[currentLEDIndex + ridingWidth + 1].setRGB(red / 10, green / 10, blue / 10);
 
-    // Move to the next LED position
+    // Ensure current index stays valid
+    currentLEDIndex = constrain(currentLEDIndex, 0, NUM_LEDS - ridingWidth - 2);
+
+    // --- Draw the moving bright segment with soft edges ---
+    for (int j = -2; j < ridingWidth + 2; j++) {
+      int idx = currentLEDIndex + j;
+      if (idx >= 0 && idx < NUM_LEDS) {
+        int fadeFactor;
+        if (j < 0 || j >= ridingWidth) fadeFactor = 30;     // soft edge glow
+        else fadeFactor = 100;                              // main bright part
+
+        leds[idx].setRGB(
+          (red   * fadeFactor) / 100,
+          (green * fadeFactor) / 100,
+          (blue  * fadeFactor) / 100
+        );
+      }
+    }
+
+    // --- Move the light bar ---
     currentLEDIndex += animationDirFlag;
 
-    // Check if the animation is completed
+    // --- Bounce when reaching edges ---
     if (currentLEDIndex >= NUM_LEDS - ridingWidth - 2) {
-      // Change the direction
       animationDirFlag = -1;
-    } else if (currentLEDIndex < 0) {
-      // Change the direction
+    } else if (currentLEDIndex <= 0) {
       animationDirFlag = 1;
     }
 
-    // Save the last update time
+    FastLED.show();
     lastKnightRiderUpdate = millis();
   }
 }

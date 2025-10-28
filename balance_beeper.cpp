@@ -3,8 +3,8 @@
 #define BEEPER_PIN 4
 
 #define PLAY_STARTUP true
-#define DUTY_CYCLE_ALERT 0.80 // 0 to disable
-#define LOW_VOLTAGE 51.3 // 0 to disable
+#define DUTY_CYCLE_ALERT 0.75 // 0 to disable
+#define LOW_VOLTAGE 58.9 // 0 to disable
 #define LOW_VOLTAGE_INTERVAL 5 * 1000 // every 30 seconds
 
 class BalanceBeeper {
