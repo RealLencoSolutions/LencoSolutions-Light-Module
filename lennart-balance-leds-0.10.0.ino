@@ -72,6 +72,7 @@ const unsigned long LED_UPDATE_INTERVAL = 16; // ~60 FPS
 // Battery percent variables
 unsigned long voltageAcquiredMS = 0;
 bool voltageAcquired = false;
+bool returningToStartup = false;
 
 int currentLEDIndex = 0;
 int direction = FORWARD;
@@ -139,6 +140,10 @@ void loop() {
     direction = REVERSE;
     FastLED.setBrightness(NORMAL_BRIGHTNESS);
   } else {
+    if (movingState && !startupState)
+    {
+      returningToStartup = true;
+    }
     startupState = true;
     movingState = false;
     FastLED.setBrightness(STARTUP_BRIGHTNESS);
@@ -268,8 +273,11 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
 
 void processStartupAction() {
   
-  if (!voltageAcquired && globalVoltage != 0.0) {
-    voltageAcquired = true;
+  if (returningToStartup || (!voltageAcquired && globalVoltage != 0.0)) {
+    if (!voltageAcquired)
+    {
+      voltageAcquired = true;
+    }
     voltageAcquiredMS = millis();
   }
 
