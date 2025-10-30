@@ -280,7 +280,7 @@ void processStartupAction() {
     voltageAcquiredMS = millis();
   }
 
-  // During the first 10 seconds after power-up, show battery percentage
+  // During the first seconds after power-up or stopping moving, show battery percentage
   if (voltageAcquired && millis()-voltageAcquiredMS <= BATTERY_INDICATOR_STARTUP_DURATION) {
     if (returningToStartup) {
         returningToStartup = false;
