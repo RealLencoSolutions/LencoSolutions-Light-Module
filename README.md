@@ -27,8 +27,8 @@ All the different part are now integrated and also include a port to connect a v
 ## Options and pins
 Features are designed to be configured VIA the constants
 1. esc.cpp: Configure CAN bus IDs, you must match the ID set in the VESC Tool
-1. balance_beeper.cpp: Configure wiring and alerts
-1. lennart-ballanceleds-0.10.0.ino: Main loop there yyou set nr of leds and stuff like color
+1. balance_beeper.cpp: Configure wiring, alerts and expected battery voltages
+1. lennart-ballanceleds-0.10.0.ino: Main loop there you set nr of leds and stuff like color
 
 
 ## Compiling/Installing
