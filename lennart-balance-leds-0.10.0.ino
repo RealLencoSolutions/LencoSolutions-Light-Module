@@ -274,8 +274,7 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
 void processStartupAction() {
   
   if (returningToStartup || (!voltageAcquired && globalVoltage != 0.0)) {
-    if (!voltageAcquired)
-    {
+    if (!voltageAcquired) {
       voltageAcquired = true;
     }
     voltageAcquiredMS = millis();
@@ -283,6 +282,10 @@ void processStartupAction() {
 
   // During the first 10 seconds after power-up, show battery percentage
   if (voltageAcquired && millis()-voltageAcquiredMS <= BATTERY_INDICATOR_STARTUP_DURATION) {
+    if (returningToStartup) {
+        returningToStartup = false;
+      }
+
     batteryPercentStartupLEDs();
   }
   // else trigger static startup lights
