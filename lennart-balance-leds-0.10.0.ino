@@ -14,6 +14,16 @@
 #define CONSTANT_LED_GREEN 0
 #define CONSTANT_LED_BLUE 0
 
+#define BATTERY_INDICATOR_LED_RED 0
+#define BATTERY_INDICATOR_LED_GREEN 255
+#define BATTERY_INDICATOR_LED_BLUE 0
+
+#define BATTERY_INDICATOR_ALTERNATE_LED_RED 0
+#define BATTERY_INDICATOR_ALTERNATE_LED_GREEN 0
+#define BATTERY_INDICATOR_ALTERNATE_LED_BLUE 255
+
+#define BATTERY_INDICATOR_STARTUP_DURATION 5000 // 10 seconds
+
 #define THRESHOLD 5000
 #define FAST_DELAY 20
 #define SLOW_DELAY 50
@@ -41,8 +51,8 @@ BalanceBeeper balanceBeeper;
 double globalErpm = 0.0;
 double globalVoltage = 0.0;
 double globalDutyCycle = 0.0;
-// double globalAdc1 = 0.0;   // (for later use)
-// double globalAdc2 = 0.0;   // (for later use)
+//double globalAdc1 = 0.0;   // (for later use)
+//double globalAdc2 = 0.0;   // (for later use)
 
 // Polling configuration
 const unsigned long CAN_POLLING_INTERVAL = 100; // every 100ms
@@ -54,6 +64,10 @@ unsigned long lastBrakeCheckMillis = 0;
 const unsigned long brakeCheckInterval = 50;
 unsigned long lastLEDUpdateMillis = 0;
 const unsigned long LED_UPDATE_INTERVAL = 16; // ~60 FPS
+
+// Battery percent variables
+unsigned long voltageAcquiredMS = 0;
+bool voltageAcquired = false;
 
 int currentLEDIndex = 0;
 int direction = FORWARD;
@@ -128,20 +142,7 @@ void loop() {
 
   // === LED patterns ===
   if (startupState) {
-    // Static startup LEDs
-    for (int i = 0; i < NUM_LEDS; i++) {
-      if (direction == FORWARD) {
-        forward_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
-        reverse_leds[i] = (i % 2 == 0)
-            ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
-            : CRGB(0, 0, 0);
-      } else {
-        reverse_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
-        forward_leds[i] = (i % 2 == 0)
-            ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
-            : CRGB(0, 0, 0);
-      }
-    }
+    processStartupAction();
   } else if (movingState) {
     knightRider(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE, 5);
   }
@@ -237,7 +238,7 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
         int fadeFactor;
         if (j < 0 || j >= ridingWidth) fadeFactor = 30;     // soft edge glow
         else fadeFactor = 100;                              // main bright part
-
+      
         leds[idx].setRGB(
           (red   * fadeFactor) / 100,
           (green * fadeFactor) / 100,
@@ -245,7 +246,7 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
         );
       }
     }
-
+  
     // --- Move the light bar ---
     currentLEDIndex += animationDirFlag;
 
@@ -258,5 +259,56 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
 
     FastLED.show();
     lastKnightRiderUpdate = millis();
+  }
+}
+
+void processStartupAction() {
+  
+  if (!voltageAcquired && globalVoltage != 0.0) {
+    voltageAcquired = true;
+    voltageAcquiredMS = millis();
+  }
+
+  // During the first 10 seconds after power-up, show battery percentage
+  if (voltageAcquired && millis()-voltageAcquiredMS <= BATTERY_INDICATOR_STARTUP_DURATION) {
+    batteryPercentStartupLEDs();
+  }
+  // else trigger static startup lights
+  else {
+    staticStartupLEDs();
+  }
+} 
+
+void staticStartupLEDs() {
+     // Static startup LEDs
+  for (int i = 0; i < NUM_LEDS; i++) {
+    if (direction == FORWARD) {
+      forward_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
+      reverse_leds[i] = (i % 2 == 0)
+          ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
+          : CRGB(0, 0, 0);
+    } else {
+      reverse_leds[i] = CRGB(FLASHING_LED_RED, FLASHING_LED_GREEN, FLASHING_LED_BLUE);
+      forward_leds[i] = (i % 2 == 0)
+          ? CRGB(CONSTANT_LED_RED, CONSTANT_LED_GREEN, CONSTANT_LED_BLUE)
+          : CRGB(0, 0, 0);
+    }
+  }
+}
+
+void batteryPercentStartupLEDs() {
+  // Get battery voltage
+  double batteryVoltage = globalVoltage;
+
+  // calculate the battery voltage to be a percentage of the difference between full voltage and low voltage
+  double batteryVoltagePercentage = (batteryVoltage - LOW_VOLTAGE) / (FULL_VOLTAGE - LOW_VOLTAGE);
+
+  //light up one led for each 10% of the battery voltage remaining and turn off the rest
+  for (int i = 0; i < NUM_LEDS; i++) {
+    if (i < batteryVoltagePercentage*NUM_LEDS) {
+      forward_leds[i].setRGB(BATTERY_INDICATOR_LED_RED, BATTERY_INDICATOR_LED_GREEN, BATTERY_INDICATOR_LED_BLUE);
+    } else {
+      forward_leds[i].setRGB(BATTERY_INDICATOR_ALTERNATE_LED_RED, BATTERY_INDICATOR_ALTERNATE_LED_GREEN, BATTERY_INDICATOR_ALTERNATE_LED_BLUE);
+    }
   }
 }
