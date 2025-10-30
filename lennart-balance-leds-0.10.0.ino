@@ -6,23 +6,27 @@
 #include "balance_beeper.cpp"
 #include "esc.cpp"   // includes your updated ESC class
 
+// Front LEDs (U1)
 #define FLASHING_LED_RED 228
 #define FLASHING_LED_GREEN 158
 #define FLASHING_LED_BLUE 0
 
+// Rear LEDs (U2)
 #define CONSTANT_LED_RED 255
 #define CONSTANT_LED_GREEN 0
 #define CONSTANT_LED_BLUE 0
-
+ 
+// The color of the LEDs showing the percent
 #define BATTERY_INDICATOR_LED_RED 0
 #define BATTERY_INDICATOR_LED_GREEN 255
 #define BATTERY_INDICATOR_LED_BLUE 0
 
+// After Percent LEDs above, color of the remaining LEDs in the bar
 #define BATTERY_INDICATOR_ALTERNATE_LED_RED 0
 #define BATTERY_INDICATOR_ALTERNATE_LED_GREEN 0
 #define BATTERY_INDICATOR_ALTERNATE_LED_BLUE 255
 
-#define BATTERY_INDICATOR_STARTUP_DURATION 5000 // 10 seconds
+#define BATTERY_INDICATOR_STARTUP_DURATION 5000 // 5 seconds
 
 #define THRESHOLD 5000
 #define FAST_DELAY 20
