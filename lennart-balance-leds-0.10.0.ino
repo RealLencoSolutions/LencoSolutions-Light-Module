@@ -26,7 +26,12 @@
 #define BATTERY_INDICATOR_ALTERNATE_LED_GREEN 0
 #define BATTERY_INDICATOR_ALTERNATE_LED_BLUE 255
 
-#define BATTERY_INDICATOR_STARTUP_DURATION 5000 // 5 seconds
+// When a single footpad is pressed, what color should it light up
+#define FOOTPAD_INDICATOR_LED_RED 0
+#define FOOTPAD_INDICATOR_LED_GREEN 0
+#define FOOTPAD_INDICATOR_LED_BLUE 255
+
+#define BATTERY_INDICATOR_DURATION 5000 // 5 seconds
 
 #define THRESHOLD 5000
 #define FAST_DELAY 20
@@ -74,6 +79,10 @@ unsigned long voltageAcquiredMS = 0;
 bool voltageAcquired = false;
 bool returningToStartup = false;
 
+// Footpad sensor variables
+unsigned long lastFootpadTriggerMillis = 0;
+bool isInitialStartup = true;
+
 int currentLEDIndex = 0;
 int direction = FORWARD;
 int animationDirFlag = 1;
@@ -111,10 +120,14 @@ void setup() {
 }
 
 void loop() {
+  
+  // Passive listenin for status 6;
+  esc.listenForMessages();
+
   // === Periodic CAN polling ===
   if (millis() - lastCanPollTime >= CAN_POLLING_INTERVAL) {
     esc.getRealtimeData();      // send request for realtime data
-    //esc.readResponse();             // read and parse response
+
     lastCanPollTime = millis();
 
     // Update globals if valid data was parsed
@@ -272,25 +285,52 @@ void knightRider(int red, int green, int blue, int ridingWidth) {
 }
 
 void processStartupAction() {
+   // Reset voltage acquired flag when returning to startup
+  if (returningToStartup) {
+    voltageAcquired = false;
+    returningToStartup = false;
+  }
   
-  if (returningToStartup || (!voltageAcquired && globalVoltage != 0.0)) {
-    if (!voltageAcquired) {
-      voltageAcquired = true;
-    }
+  // Acquire voltage and start timer when voltage becomes available
+  if (!voltageAcquired && globalVoltage != 0.0) {
+    voltageAcquired = true;
     voltageAcquiredMS = millis();
   }
 
-  // During the first seconds after power-up or stopping moving, show battery percentage
-  if (voltageAcquired && millis()-voltageAcquiredMS <= BATTERY_INDICATOR_STARTUP_DURATION) {
-    if (returningToStartup) {
-        returningToStartup = false;
-      }
+  // Check if both footpad sensors were triggered
+  if (esc.adc1 > esc.footpadThreshold && esc.adc2 > esc.footpadThreshold) {
+    lastFootpadTriggerMillis = millis();
+    isInitialStartup = false;
+  }
 
+  // Clear initial startup flag after duration expires
+  if (isInitialStartup && voltageAcquired && (millis() - voltageAcquiredMS > BATTERY_INDICATOR_DURATION)) {
+    isInitialStartup = false;  
+  }
+
+  // Determine if we should show battery
+  // FIXED: Only show battery if voltage is acquired AND within timer window
+  bool showBatteryOnTimer = voltageAcquired && (millis() - voltageAcquiredMS <= BATTERY_INDICATOR_DURATION);
+  bool showBatteryOnFootpad = voltageAcquired && (millis() - lastFootpadTriggerMillis <= BATTERY_INDICATOR_DURATION);
+  
+  // Show battery only if voltage is acquired and within timer
+  if (showBatteryOnTimer) {
     batteryPercentStartupLEDs();
   }
-  // else trigger static startup lights
+  // Else if footpad was triggered recently
+  else if (showBatteryOnFootpad) {
+    batteryPercentStartupLEDs();
+  }
+  // Else show static or single footpad indicator
   else {
-    staticStartupLEDs();
+    // Check if only one footpad is triggered 
+    bool onlyOneFootpad = (esc.adc1 > esc.footpadThreshold) != (esc.adc2 > esc.footpadThreshold);
+    
+    if (onlyOneFootpad) {
+      singleFootpadTriggeredStartupLEDs();
+    } else {
+      staticStartupLEDs();
+    }
   }
 } 
 
@@ -312,6 +352,14 @@ void staticStartupLEDs() {
 }
 
 void batteryPercentStartupLEDs() {
+
+    if (!isInitialStartup) {
+    // Only check footpads after initial startup (when triggered by footpad press)
+    if (esc.adc1 < esc.footpadThreshold || esc.adc2 < esc.footpadThreshold) {
+      return;
+    }
+  }
+
   // Get battery voltage
   double batteryVoltage = globalVoltage;
 
@@ -324,6 +372,36 @@ void batteryPercentStartupLEDs() {
       forward_leds[i].setRGB(BATTERY_INDICATOR_LED_RED, BATTERY_INDICATOR_LED_GREEN, BATTERY_INDICATOR_LED_BLUE);
     } else {
       forward_leds[i].setRGB(BATTERY_INDICATOR_ALTERNATE_LED_RED, BATTERY_INDICATOR_ALTERNATE_LED_GREEN, BATTERY_INDICATOR_ALTERNATE_LED_BLUE);
+    }
+  }
+}
+
+void singleFootpadTriggeredStartupLEDs() {
+  
+  if (esc.adc1 > esc.footpadThreshold)
+  {
+    for (int i = 0; i < NUM_LEDS; i++)
+    {
+      if (i < NUM_LEDS/2){
+        forward_leds[i].setRGB(FOOTPAD_INDICATOR_LED_RED, FOOTPAD_INDICATOR_LED_GREEN, FOOTPAD_INDICATOR_LED_BLUE);
+      }
+      else {
+        forward_leds[i].setRGB(0, 0, 0);
+      }
+      
+    }
+  }
+  else
+  if (esc.adc2 > esc.footpadThreshold)
+  {
+    for (int i = 0; i < NUM_LEDS; i++)
+    {
+      if (i > NUM_LEDS/2){
+        forward_leds[i].setRGB(FOOTPAD_INDICATOR_LED_RED, FOOTPAD_INDICATOR_LED_GREEN, FOOTPAD_INDICATOR_LED_BLUE);
+      }
+      else {
+        forward_leds[i].setRGB(0, 0, 0);
+      }
     }
   }
 }
